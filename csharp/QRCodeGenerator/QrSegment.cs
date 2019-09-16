@@ -64,7 +64,9 @@ namespace nayuki.qrcodegen
 
             IList<QrSegment> result = new List<QrSegment>();
             if (text.Equals(""))
-                ;
+            {
+                /* do nothing */
+            }
             else if (NUMERIC_REGEX.Matches(text).Count > 0)
                 result.Add(MakeNumeric(text));
             else if (ALPHANUMERIC_REGEX.Matches(text).Count > 0)

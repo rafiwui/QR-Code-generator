@@ -21,9 +21,10 @@ namespace nayuki.qrcodegen
             var dest = new T[newLength];
             for (int i = 0; i < newLength; i++)
             {
-                if (i < src.Length) dest[i] = src[i];
-
-                break;
+                if (i < src.Length)
+                    dest[i] = src[i];
+                else
+                    break;
             }
 
             return dest;
