@@ -812,7 +812,7 @@ namespace nayuki.qrcodegen
 
         /// <summary>
         /// Can only be called immediately after a white run is added, and
-        /// returns either 0, 1, or 2. A helper function for getPenaltyScore().
+        /// returns either 0, 1, or 2. A helper function for <see cref="GetPenaltyScore()"/>.
         /// </summary>
         /// <param name="runHistory"></param>
         /// <returns></returns>
@@ -827,7 +827,7 @@ namespace nayuki.qrcodegen
         }
 
         /// <summary>
-        /// Must be called at the end of a line (row or column) of modules. A helper function for getPenaltyScore().
+        /// Must be called at the end of a line (row or column) of modules. A helper function for <see cref="GetPenaltyScore()"/>.
         /// </summary>
         /// <param name="currentRunColor"></param>
         /// <param name="currentRunLength"></param>
@@ -848,7 +848,7 @@ namespace nayuki.qrcodegen
         }
 
         /// <summary>
-        /// Pushes the given value to the front and drops the last value. A helper function for getPenaltyScore().
+        /// Pushes the given value to the front and drops the last value. A helper function for <see cref="GetPenaltyScore()"/>.
         /// </summary>
         /// <param name="currentRunLength"></param>
         /// <param name="runHistory"></param>
