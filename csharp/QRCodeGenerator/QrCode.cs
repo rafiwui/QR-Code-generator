@@ -295,8 +295,8 @@ namespace nayuki.qrcodegen
             DrawFinderPattern(size - 4, 3);
             DrawFinderPattern(3, size - 4);
 
-            int[] alignPatPos = GetAlignmentPatternPositions();
-            int   numAlign    = alignPatPos.Length;
+            byte[] alignPatPos = GetAlignmentPatternPositions();
+            int    numAlign    = alignPatPos.Length;
             for (int i = 0; i < numAlign; i++)
             {
                 for (int j = 0; j < numAlign; j++)
@@ -415,8 +415,8 @@ namespace nayuki.qrcodegen
             if (data is null) throw new ArgumentNullException(nameof(data));
             if (data.Length != GetNumDataCodewords(version, errorCorrectionLevel)) throw new ArgumentException(nameof(data));
 
-            int numBlocks      = NUM_ERROR_CORRECTION_BLOCKS[errorCorrectionLevel.formatBits, version];
-            int blockEccLen    = ECC_CODEWORDS_PER_BLOCK[errorCorrectionLevel.formatBits, version];
+            int numBlocks      = QrUtils.NUM_ERROR_CORRECTION_BLOCKS[errorCorrectionLevel.Ordinal(), version];
+            int blockEccLen    = QrUtils.NUM_ECC_CODEWORDS_PER_BLOCK[errorCorrectionLevel.Ordinal(), version];
             int rawCodewords   = GetNumRawDataModules(version) / 8;
             int numShortBlocks = numBlocks - rawCodewords % numBlocks;
             int shortBlockLen  = rawCodewords / numBlocks;
@@ -425,9 +425,9 @@ namespace nayuki.qrcodegen
             byte[]   rsDiv  = ReedSolomonComputeDivisor(blockEccLen);
             for (int i = 0, k = 0; i < numBlocks; i++)
             {
-                byte[] dat = Utils.CopyArrayRange(data, k, k + shortBlockLen - blockEccLen + (i < numShortBlocks ? 0 : 1));
+                byte[] dat = QrUtils.CopyArrayRange(data, k, k + shortBlockLen - blockEccLen + (i < numShortBlocks ? 0 : 1));
                 k += dat.Length;
-                byte[] block = Utils.CopyArrayWithNewLength(dat, shortBlockLen + 1);
+                byte[] block = QrUtils.CopyArrayWithNewLength(dat, shortBlockLen + 1);
                 byte[] ecc   = ReedSolomonComputeRemainder(dat, rsDiv);
                 Array.Copy(ecc, 0, block, block.Length - blockEccLen, ecc.Length);
                 blocks[i] = block;
@@ -672,30 +672,16 @@ namespace nayuki.qrcodegen
         /// <summary>
         /// Returns an ascending list of positions of alignment patterns for this version number.
         /// Each position is in the range [0,177), and are used on both the x and y axes.
-        /// This could be implemented as lookup table of 40 variable-length lists of unsigned bytes.
         /// </summary>
         /// <returns></returns>
-        private int[] GetAlignmentPatternPositions()
+        private byte[] GetAlignmentPatternPositions()
         {
-            if (version == 1) return new int[] { };
-
-            int numAlign = version / 7 + 2;
-            int step;
-            if (version == 32)
-                step = 26;
-            else
-                step = (version * 4 + numAlign * 2 + 1) / (numAlign * 2 - 2) * 2;
-            int[] result = new int[numAlign];
-            result[0] = 6;
-            for (int i = result.Length - 1, pos = size - 7; i >= 1; i--, pos -= step) result[i] = pos;
-
-            return result;
+            return QrUtils.ALIGNMENT_PATTERN_POSITIONS[version];
         }
 
         /// <summary>
         /// Returns the number of data bits that can be stored in a QR Code of the given version number, after
         /// all function modules are excluded. This includes remainder bits, so it might not be a multiple of 8.
-        /// The result is in the range [208, 29648]. This could be implemented as a 40-entry lookup table.
         /// </summary>
         /// <param name="ver"></param>
         /// <returns></returns>
@@ -704,25 +690,12 @@ namespace nayuki.qrcodegen
         {
             if (ver < MIN_VERSION || ver > MAX_VERSION) throw new ArgumentException("Version number out of range", nameof(ver));
 
-            int size   = ver * 4 + 17;
-            int result = size * size;
-            result -= 8 * 8 * 3;
-            result -= 15 * 2 + 1;
-            result -= (size - 16) * 2;
-            if (ver >= 2)
-            {
-                int numAlign = ver / 7 + 2;
-                result -= (numAlign - 1) * (numAlign - 1) * 25;
-                result -= (numAlign - 2) * 2 * 20;
-                if (ver >= 7) result -= 6 * 3 * 2;
-            }
-
-            return result;
+            return QrUtils.NUM_DATA_MODULES[ver];
         }
 
         /// <summary>
-        /// Returns a Reed-Solomon ECC generator polynomial for the given degree. This could be
-        /// implemented as a lookup table over all possible parameter values, instead of as an algorithm.
+        /// Returns a Reed-Solomon ECC generator polynomial for the given degree.
+        /// TODO: This could be implemented as a lookup table over all possible parameter values, instead of as an algorithm.
         /// </summary>
         /// <param name="degree"></param>
         /// <returns></returns>
@@ -775,39 +748,29 @@ namespace nayuki.qrcodegen
 
         /// <summary>
         /// Returns the product of the two given field elements modulo GF(2^8/0x11D). The arguments and result
-        /// are unsigned 8-bit integers. This could be implemented as a lookup table of 256*256 entries of uint8.
+        /// are unsigned 8-bit integers.
         /// </summary>
         /// <param name="x"></param>
         /// <param name="y"></param>
         /// <returns></returns>
         private static int ReedSolomonMultiply(int x, int y)
         {
-            Debug.Assert(x >> 8 == 0 && y >> 8 == 0);
-            int z = 0;
-            for (int i = 7; i >= 0; i--)
-            {
-                z =  (int)((z << 1) ^ (((uint)z >> 7) * 0x11D));
-                z ^= (int)((((uint)y >> i) & 1) * x);
-            }
+            if (x < 0 || x > 255) throw new ArgumentException(nameof(x));
+            if (y < 0 || y > 255) throw new ArgumentException(nameof(y));
 
-            Debug.Assert((uint)z >> 8 == 0);
-
-            return z;
+            return QrUtils.REED_SOLOMON_MULTIPLY_LOOKUP[x, y];
         }
 
         /// <summary>
         /// Returns the number of 8-bit data (i.e. not error correction) codewords contained in any
         /// QR Code of the given version number and error correction level, with remainder bits discarded.
-        /// This stateless pure function could be implemented as a (40*4)-cell lookup table.
         /// </summary>
         /// <param name="ver">QR Code version number.</param>
         /// <param name="ecl">Error correction level.</param>
         /// <returns>Number of 8-bit data codewords.</returns>
         public static int GetNumDataCodewords(int ver, Ecc ecl)
         {
-            return GetNumRawDataModules(ver) / 8
-                   - ECC_CODEWORDS_PER_BLOCK[ecl.formatBits, ver]
-                   * NUM_ERROR_CORRECTION_BLOCKS[ecl.formatBits, ver];
+            return QrUtils.NUM_DATA_CODEWORDS[ecl.Ordinal(), ver];
         }
 
         /// <summary>
@@ -883,49 +846,6 @@ namespace nayuki.qrcodegen
         private const int PENALTY_N3 = 40;
         private const int PENALTY_N4 = 10;
 
-        // Sorted by Ecc.formatBit
-        private static readonly byte[,] ECC_CODEWORDS_PER_BLOCK = {
-            // Version: (note that index 0 is for padding, and is set to an value not appearing elsewhere => 0)
-            //0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
-            {
-                0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
-                28, 28, 28, 28, 28
-            }, // Medium
-            {
-                0, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-                30, 30, 30, 30, 30
-            }, // Low
-            {
-                0, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-                30, 30, 30, 30, 30
-            }, // High
-            {
-                0, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28, 30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-                30, 30, 30, 30, 30
-            }, // Quartile
-        };
-
-        // Sorted by Ecc.formatBit
-        private static readonly byte[,] NUM_ERROR_CORRECTION_BLOCKS = {
-            // Version: (note that index 0 is for padding, and is set to an value not appearing elsewhere => 0)
-            //0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
-            {
-                0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47,
-                49
-            }, // Medium
-            {
-                0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25
-            }, // Low
-            {
-                0, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63, 66, 70, 74,
-                77, 81
-            }, // High
-            {
-                0, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8, 8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23, 25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53, 56, 59, 62,
-                65, 68
-            }, // Quartile
-        };
-
         /// <summary>
         /// The error correction level in a QR Code symbol.
         /// </summary>
@@ -934,22 +854,22 @@ namespace nayuki.qrcodegen
             /// <summary>
             /// The QR Code can tolerate about 7% erroneous codewords.
             /// </summary>
-            public static readonly Ecc LOW = new Ecc(1);
+            public static readonly Ecc LOW = new Ecc(1, 0);
 
             /// <summary>
             /// The QR Code can tolerate about 15% erroneous codewords.
             /// </summary>
-            public static readonly Ecc MEDIUM = new Ecc(0);
+            public static readonly Ecc MEDIUM = new Ecc(0, 1);
 
             /// <summary>
             /// The QR Code can tolerate about 25% erroneous codewords.
             /// </summary>
-            public static readonly Ecc QUARTILE = new Ecc(3);
+            public static readonly Ecc QUARTILE = new Ecc(3, 2);
 
             /// <summary>
             /// The QR Code can tolerate about 30% erroneous codewords.
             /// </summary>
-            public static readonly Ecc HIGH = new Ecc(2);
+            public static readonly Ecc HIGH = new Ecc(2, 3);
 
             /// <summary>
             /// Helper method to allow java-enum-like iteration through the error levels.
@@ -963,13 +883,25 @@ namespace nayuki.qrcodegen
             }
 
             /// <summary>
+            /// Helper method to allow java-enum-like retrieval of "index".
+            /// </summary>
+            /// <returns>Index of the current Ecc.</returns>
+            public int Ordinal()
+            {
+                return index;
+            }
+
+            /// <summary>
             /// In the range 0 to 3 (unsigned 2-bit integer).
             /// </summary>
             public readonly int formatBits;
 
-            private Ecc(int fb)
+            private readonly int index;
+
+            private Ecc(int fb, int idx)
             {
                 formatBits = fb;
+                index      = idx;
             }
         }
     }

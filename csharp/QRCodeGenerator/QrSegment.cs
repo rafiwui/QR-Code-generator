@@ -17,7 +17,7 @@ namespace nayuki.qrcodegen
                 bb.AppendBits(b & 0xFF, 8);
             }
 
-            return new QrSegment(Mode.BYTE(), data.Length, bb);
+            return new QrSegment(Mode.BYTE, data.Length, bb);
         }
 
         public static QrSegment MakeNumeric(string digits)
@@ -34,7 +34,7 @@ namespace nayuki.qrcodegen
                 i += n;
             }
 
-            return new QrSegment(Mode.NUMERIC(), digits.Length, bb);
+            return new QrSegment(Mode.NUMERIC, digits.Length, bb);
         }
 
         public static QrSegment MakeAlphanumeric(string text)
@@ -55,7 +55,7 @@ namespace nayuki.qrcodegen
 
             if (i < text.Length) bb.AppendBits(ALPHANUMERIC_CHARSET.IndexOf(text[i]), 6);
 
-            return new QrSegment(Mode.ALPHANUMERIC(), text.Length, bb);
+            return new QrSegment(Mode.ALPHANUMERIC, text.Length, bb);
         }
 
         public static IList<QrSegment> MakeSegments(string text)
@@ -81,11 +81,9 @@ namespace nayuki.qrcodegen
         {
             BitBuffer bb = new BitBuffer();
 
-            if (assignVal < 0)
-            {
-                throw new ArgumentException("ECI assignment value out of range", nameof(assignVal));
-            }
-            else if (assignVal < (1 << 7))
+            if (assignVal < 0) throw new ArgumentException("ECI assignment value out of range", nameof(assignVal));
+
+            if (assignVal < (1 << 7))
             {
                 bb.AppendBits(assignVal, 8);
             }
@@ -104,12 +102,12 @@ namespace nayuki.qrcodegen
                 throw new ArgumentException("ECI assignment value out of range", nameof(assignVal));
             }
 
-            return new QrSegment(Mode.ECI(), 0, bb);
+            return new QrSegment(Mode.ECI, 0, bb);
         }
 
-        public Mode      mode;
-        public int       numChars;
-        public BitBuffer data;
+        public readonly Mode      mode;
+        public readonly int       numChars;
+        public readonly BitBuffer data;
 
         public QrSegment(Mode md, int numCh, BitBuffer data)
         {
@@ -146,39 +144,21 @@ namespace nayuki.qrcodegen
             return (int)result;
         }
 
-        public static Regex  NUMERIC_REGEX        = new Regex(@"[0-9]*");
-        public static Regex  ALPHANUMERIC_REGEX   = new Regex(@"[A-Z0-9 $%*+./:-]*");
-        public static string ALPHANUMERIC_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
+        public static readonly Regex  NUMERIC_REGEX        = new Regex(@"[0-9]*");
+        public static readonly Regex  ALPHANUMERIC_REGEX   = new Regex(@"[A-Z0-9 $%*+./:-]*");
+        public const           string ALPHANUMERIC_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 
         public class Mode
         {
-            public static Mode NUMERIC()
-            {
-                return new Mode(0x1, 10, 12, 14);
-            }
+            public static readonly Mode NUMERIC      = new Mode(0x1, 10, 12, 14);
+            public static readonly Mode ALPHANUMERIC = new Mode(0x2, 9, 11, 13);
+            public static readonly Mode BYTE         = new Mode(0x4, 8, 16, 16);
+            public static readonly Mode KANJI        = new Mode(0x8, 8, 10, 12);
+            public static readonly Mode ECI          = new Mode(0x7, 0, 0, 0);
 
-            public static Mode ALPHANUMERIC()
-            {
-                return new Mode(0x2, 9, 11, 13);
-            }
+            public readonly int modeBits;
 
-            public static Mode BYTE()
-            {
-                return new Mode(0x4, 8, 16, 16);
-            }
-
-            public static Mode KANJI()
-            {
-                return new Mode(0x8, 8, 10, 12);
-            }
-
-            public static Mode ECI()
-            {
-                return new Mode(0x7, 0, 0, 0);
-            }
-
-            public  int   modeBits;
-            private int[] numBitsCharCount;
+            private readonly int[] numBitsCharCount;
 
             private Mode(int mode, params int[] ccbits)
             {
